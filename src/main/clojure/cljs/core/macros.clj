@@ -41,3 +41,6 @@
   (swap! env/*compiler* assoc-in
     [::namespaces (.getName *ns*) :requires alias] ns)
   nil)
+
+(defmacro new-error [message]
+  `(js/Error. ~message))
