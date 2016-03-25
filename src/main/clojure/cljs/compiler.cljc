@@ -437,17 +437,18 @@
 (defmethod emit* :if
   [{:keys [test then else env unchecked]}]
   (let [context (:context env)
-        checked (not (or unchecked (safe-test? env test)))]
+        checked (not (or unchecked (safe-test? env test)))
+        checked-test (if checked
+                      (list "(function(){return " test " != null && " test " !== false})()")
+                      test)]
     (cond
       (truthy-constant? test) (emitln then)
       (falsey-constant? test) (emitln else)
       :else
       (if (= :expr context)
-        (emits "(" (when checked "cljs.core.truth_") "(" test ")?" then ":" else ")")
+        (emits "(" "(" checked-test ")?" then ":" else ")")
         (do
-          (if checked
-            (emitln "if(cljs.core.truth_(" test ")){")
-            (emitln "if(" test "){"))
+          (emitln "if(" checked-test "){")
           (emitln then "} else {")
           (emitln else "}"))))))
 
