@@ -439,8 +439,8 @@
   (let [context (:context env)
         checked (not (or unchecked (safe-test? env test)))
         checked-test (if checked
-                      (list "(function(){return " test " != null && " test " !== false})()")
-                      test)]
+                       (list "(function(x){return x != null && x !== false})(" test ")")
+                       test)]
     (cond
       (truthy-constant? test) (emitln then)
       (falsey-constant? test) (emitln else)
