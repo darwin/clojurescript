@@ -32,6 +32,7 @@
 
 (declare boostrap-if-needed!)
 (def ^:dynamic *boostrapped?* false)
+(def ^:dynamic *boostrap-timeout* 100)
 (def ^:dynamic *boostrap-listeners* (array)) ; a native array of plain functions
 
 (defn flush-print-queue! [conn]
@@ -202,7 +203,7 @@
   ;   If document is already loaded, we simply execute our function.
   ;   If not, we try to schedule another check with timeout 0ms (fast path).
   ;   If still not loaded, we repeatedly schedule future checks with timeout 100ms (until loaded).
-  ;   The magic constant 100ms should be good enough for our bootstrapping use-case:
+  ;   The magic constant *boostrap-timeout* (100ms) should be good enough for our bootstrapping use-case:
   ;     1. we don't want to starve event queue in case of slow loading, hence non-zero timeouts
   ;     2. but we also want to minimize the risk of potentially missing first eval request expecting bootstrapped env
   ;        note: our own `evaluate-javascript` has a guard, but there could be some other code doing their own evals
@@ -211,7 +212,7 @@
   ; We do not want to hook DOMContentLoaded or onreadystatechange events which could interfere with user's own handlers.
   ;
   (if (= (.-readyState js/document) "loading")
-    (js/setTimeout #(call-after-document-finished-loading f 100) timeout)
+    (js/setTimeout #(call-after-document-finished-loading f *boostrap-timeout*) timeout)
     (f)))
 
 (defn bootstrap
