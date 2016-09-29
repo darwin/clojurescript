@@ -30,6 +30,10 @@
 (def xpc-connection (atom nil))
 (def print-queue (array))
 
+(declare boostrap-if-needed!)
+(def ^:dynamic *boostrapped?* false)
+(def ^:dynamic *boostrap-listeners* (array)) ; a native array of plain functions
+
 (defn flush-print-queue! [conn]
   (doseq [str print-queue]
     (net/transmit conn :print str))
@@ -54,6 +58,7 @@
 (defn evaluate-javascript
   "Process a single block of JavaScript received from the server"
   [conn block]
+  (boostrap-if-needed!) ; this is an edge case when we happen to be still waiting for a timeout in `call-after-document-finished-loading`
   (let [result
         (try
           {:status :success
@@ -122,7 +127,7 @@
 
 (def load-queue nil)
 
-(defn bootstrap
+(defn bootstrap!
   "Reusable browser REPL bootstrapping. Patches the essential functions
   in goog.base to support re-loading of namespaces after page load."
   []
@@ -180,6 +185,53 @@
             (when (= reload "reload-all")
               (set! (.-cljsReloadAll_ js/goog) false))
             ret))))))
+
+(defn notify-listeners! [listeners]
+  (doseq [listener listeners]
+    (listener)))
+
+(defn boostrap-if-needed! []
+  (when-not *boostrapped?*
+    (set! *boostrapped?* true)
+    (bootstrap!))
+  (notify-listeners! *boostrap-listeners*)
+  (set! *boostrap-listeners* (array)))
+
+(defn call-after-document-finished-loading [f timeout]
+  ; Our strategy:
+  ;   If document is already loaded, we simply execute our function.
+  ;   If not, we try to schedule another check with timeout 0ms (fast path).
+  ;   If still not loaded, we repeatedly schedule future checks with timeout 100ms (until loaded).
+  ;   The magic constant 100ms should be good enough for our bootstrapping use-case:
+  ;     1. we don't want to starve event queue in case of slow loading, hence non-zero timeouts
+  ;     2. but we also want to minimize the risk of potentially missing first eval request expecting bootstrapped env
+  ;        note: our own `evaluate-javascript` has a guard, but there could be some other code doing their own evals
+  ;
+  ; We use polling here because we cannot assume anything about user's code.
+  ; We do not want to hook DOMContentLoaded or onreadystatechange events which could interfere with user's own handlers.
+  ;
+  (if (= (.-readyState js/document) "loading")
+    (js/setTimeout #(call-after-document-finished-loading f 100) timeout)
+    (f)))
+
+(defn bootstrap
+  "Reusable browser REPL bootstrapping. Patches the essential functions
+  in goog.base to support re-loading of namespaces after page load.
+
+  Note that this function might do its job asynchronously if at the time of calling the document is still loading.
+  You may provide a callback which will be called immediatelly after bootstrapping happens.
+  It has no effect if called after bootstrapping has been already done. Only the callback is called immediatelly."
+  ([] (bootstrap nil))
+  ([callback]
+  ; patching goog methods before document finished loading can unexpectedly break following goog.require code:
+  ; `<script>goog.require("foo.bar");</script><script>foo.bar.some()</script>`
+  ; It doesn't work as expected any more, as described here: https://developers.google.com/closure/library/docs/gettingstarted#wha
+  ; see CLJS-TODO
+  (when (some? callback)
+    (assert (fn? callback) (str "The callback parameter to clojure.browser.repl/bootstrap expected to be a function."
+                                "Got " (type callback) " instead."))
+    (.push *boostrap-listeners* callback))
+  (call-after-document-finished-loading boostrap-if-needed! 0)))
 
 (defn connect
   "Connects to a REPL server from an HTML document. After the
