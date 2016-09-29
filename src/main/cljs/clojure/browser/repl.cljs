@@ -132,6 +132,7 @@
   in goog.base to support re-loading of namespaces after page load."
   []
   ;; Monkey-patch goog.provide if running under optimizations :none - David
+  (set! *boostrapped?* true)
   (when-not js/COMPILED
     (set! (.-require__ js/goog) js/goog.require)
     ;; suppress useless Google Closure error about duplicate provides
@@ -191,8 +192,7 @@
     (listener)))
 
 (defn boostrap-if-needed! []
-  (when-not *boostrapped?*
-    (set! *boostrapped?* true)
+  (if-not *boostrapped?*
     (bootstrap!))
   (notify-listeners! *boostrap-listeners*)
   (set! *boostrap-listeners* (array)))
