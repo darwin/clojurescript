@@ -1249,6 +1249,7 @@
 #?(:clj
    (defn emit-source-map [src dest sm-data opts]
      (let [sm-file (io/file (str (.getPath ^File dest) ".map"))
+           inline-source-maps? (true? (:inline-source-maps opts))
            sm-json (sm/encode {(url-path src) (:source-map sm-data)}
                               {:lines                   (+ (:gen-line sm-data) 2)
                                :file                    (url-path dest)
@@ -1256,8 +1257,8 @@
                                :source-map-timestamp    (:source-map-timestamp opts)
                                :source-map-pretty-print (:source-map-pretty-print opts)
                                :relpaths                {(util/path src)
-                                                         (util/ns->relpath (first (:provides opts)) (:ext opts))}})
-           inline-source-maps? (true? (:inline-source-maps opts))
+                                                         (util/ns->relpath (first (:provides opts)) (:ext opts))}
+                               :sources-content         (if inline-source-maps? [(slurp src)])})
            source-mapping-url (if inline-source-maps?
                                 (prepare-source-mapping-data-url sm-json)
                                 (let [source-map-asset-path (:source-map-asset-path opts)
