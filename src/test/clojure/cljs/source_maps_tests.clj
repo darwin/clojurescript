@@ -113,3 +113,26 @@
       (are [file pattern] (check-file (build-result out file) pattern)
         "main.js" #"sourceMappingURL=hard/coded/path\.js\.map\?some=param&another=param2&rel=\d+"
         "utils.js" #"sourceMappingURL=hard/coded/path\.js\.map\?some=param&another=param2&rel=\d+"))))
+
+(deftest test-inlined-source-maps
+  (testing "inlined source maps with defaults under :none optimizations"
+    (let [opts {:inline-source-maps true}
+          out (build-project-with-source-maps "source-maps-inlined-onone" opts)]
+      (are [file pattern] (check-file (build-result out file) pattern)
+        "main.cljs" true
+        "main.js" "sourceMappingURL=data:application/json;base64,"
+        "main.js.map" false
+        "utils.cljs" true
+        "utils.js" "sourceMappingURL=data:application/json;base64,"
+        "utils.js.map" false)))
+  (testing ":inline-source-maps should have no effect with disabled source maps under :none optimizations"
+    (let [opts {:source-map         false
+                :inline-source-maps true}
+          out (build-project-with-source-maps "source-maps-inlined-onone-disabled" opts)]
+      (are [file pattern] (check-file (build-result out file) pattern)
+        "main.cljs" false
+        "main.js" (! "sourceMappingURL")
+        "main.js.map" false
+        "utils.cljs" false
+        "utils.js" (! "sourceMappingURL")
+        "utils.js.map" false))))
