@@ -28,7 +28,8 @@
                      [cljs.analyzer :as ana]
                      [cljs.source-map :as sm]))
   #?(:clj (:import java.lang.StringBuilder
-                   java.io.File)
+                   java.io.File
+                   (javax.xml.bind DatatypeConverter))
      :cljs (:import [goog.string StringBuffer])))
 
 #?(:clj (set! *warn-on-reflection* true))
@@ -1221,32 +1222,57 @@
      (ana/parse-ns src dest nil)))
 
 #?(:clj
+   (defn- append-source-map-timestamp [source-mapping-url timestamp]
+     (if-not (some? timestamp)
+       source-mapping-url
+       (str source-mapping-url
+            (if-not (string/index-of source-mapping-url "?") "?" "&")
+            "rel=" timestamp))))
+
+#?(:clj
+   (defn- strip-prefix-path [path prefix-path]
+     (if (string/starts-with? path prefix-path)
+       (subs path (count prefix-path)))))
+
+#?(:clj
+   (defn- prepare-source-mapping-url [^File sm-file source-map-asset-path source-map-url output-dir timestamp]
+     (let [mapping-url (if source-map-asset-path
+                         (str source-map-asset-path (strip-prefix-path (util/path sm-file) output-dir))
+                         (or source-map-url (.getName sm-file)))]
+       (append-source-map-timestamp mapping-url timestamp))))
+
+#?(:clj
+   (defn- prepare-source-mapping-data-url [^String sm-json]
+     (let [encoded-json (DatatypeConverter/printBase64Binary (.getBytes sm-json "UTF-8"))]
+       (str "data:application/json;base64," encoded-json))))
+
+#?(:clj
    (defn emit-source-map [src dest sm-data opts]
-     (let [sm-file (io/file (str (.getPath ^File dest) ".map"))]
-       (if-let [smap (:source-map-asset-path opts)]
-         (emits "\n//# sourceMappingURL=" smap
-           (string/replace (util/path sm-file)
-             (str (util/path (io/file (:output-dir opts))))
-             "")
-           (if (true? (:source-map-timestamp opts))
-             (str
-               (if-not (string/index-of smap "?") "?" "&")
-               "rel=" (System/currentTimeMillis))
-             ""))
-         (emits "\n//# sourceMappingURL="
-           (or (:source-map-url opts) (.getName sm-file))
-           (if (true? (:source-map-timestamp opts))
-             (str "?rel=" (System/currentTimeMillis))
-             "")))
-       (spit sm-file
-         (sm/encode {(url-path src) (:source-map sm-data)}
-           {:lines (+ (:gen-line sm-data) 2)
-            :file (url-path dest)
-            :source-map-path (:source-map-path opts)
-            :source-map-timestamp (:source-map-timestamp opts)
-            :source-map-pretty-print (:source-map-pretty-print opts)
-            :relpaths {(util/path src)
-                       (util/ns->relpath (first (:provides opts)) (:ext opts))}})))))
+     (let [sm-file (io/file (str (.getPath ^File dest) ".map"))
+           sm-json (sm/encode {(url-path src) (:source-map sm-data)}
+                              {:lines                   (+ (:gen-line sm-data) 2)
+                               :file                    (url-path dest)
+                               :source-map-path         (:source-map-path opts)
+                               :source-map-timestamp    (:source-map-timestamp opts)
+                               :source-map-pretty-print (:source-map-pretty-print opts)
+                               :relpaths                {(util/path src)
+                                                         (util/ns->relpath (first (:provides opts)) (:ext opts))}})
+           inline-source-maps? (true? (:inline-source-maps opts))
+           source-mapping-url (if inline-source-maps?
+                                (prepare-source-mapping-data-url sm-json)
+                                (let [source-map-asset-path (:source-map-asset-path opts)
+                                      source-map-url (:source-map-url opts)
+                                      output-dir (util/path (io/file (:output-dir opts)))
+                                      want-timestamp? (true? (:source-map-timestamp opts))
+                                      timestamp (if want-timestamp? (System/currentTimeMillis))]
+                                  (prepare-source-mapping-url sm-file
+                                                              source-map-asset-path
+                                                              source-map-url
+                                                              output-dir
+                                                              timestamp)))]
+       (emits "\n//# sourceMappingURL=" source-mapping-url)
+       (if-not inline-source-maps?
+         (spit sm-file sm-json)))))
 
 #?(:clj
    (defn emit-source [src dest ext opts]
