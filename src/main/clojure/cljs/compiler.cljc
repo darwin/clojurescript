@@ -75,7 +75,8 @@
 
 (defn munge-reserved [reserved]
   (fn [s]
-    (if-not (nil? (get reserved s))
+    (if (or (some? (get reserved s))
+            (= s "async")) ; see CLJS-1954
       (str s "$")
       s)))
 
@@ -109,6 +110,7 @@
            rf (munge-reserved reserved)
            ss (map rf (string/split ss #"\."))
            ss (string/join "." ss)
+           ss (string/replace ss "goog.async$" "goog.async") ; an ugly hack, see CLJS-1954
            ms #?(:clj (clojure.lang.Compiler/munge ss)
                  :cljs (cljs.core/munge-str ss))]
        (if (symbol? s)
