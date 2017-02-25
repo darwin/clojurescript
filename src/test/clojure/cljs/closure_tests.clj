@@ -68,3 +68,19 @@
              ["cljs/core.js"
               "cljs/core/constants.js"
               "module_test/modules/a.js"])))))
+
+(defn project-with-async-name [output-dir]
+  {:inputs (str (io/file "src" "test" "cljs_build" "async_name"))
+   :opts   {:output-dir         output-dir
+            :optimizations      :advanced
+            :static-fns         true
+            :optimize-constants true
+            :elide-asserts      true}})
+
+(deftest test-cljs-1954-async-name
+  (let [out (.getPath (io/file (test/tmp-dir) "cljs-1954-out"))
+        project (project-with-async-name out)]
+    (test/delete-out-files out)
+    (let [output (with-out-str (build/build (build/inputs (:inputs project)) (:opts project)))]
+      (is (not (string/includes? output "JSC_PARSE_ERROR"))
+          (str "project-with-async-name not expected to break with JSC_PARSE_ERROR\n" output)))))
