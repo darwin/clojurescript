@@ -4437,7 +4437,7 @@
    (defn build-affecting-options [opts]
      (select-keys opts
        [:static-fns :fn-invoke-direct :optimize-constants :elide-asserts :target
-        :cache-key :checked-arrays :language-out])))
+        :cache-key :checked-arrays :language-out :inline-source-maps])))
 
 #?(:clj
    (defn build-affecting-options-sha [path opts]
