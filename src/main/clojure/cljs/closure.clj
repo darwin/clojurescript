@@ -2721,7 +2721,6 @@
                            ana/*cljs-static-fns*)
              sources (when source
                        (-find-sources source opts))]
-         (println "EFFECTIVE COMPILER OPTS" (prn-str opts))
          (check-output-to opts)
          (check-output-dir opts)
          (check-source-map opts)

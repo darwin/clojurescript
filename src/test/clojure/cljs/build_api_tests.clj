@@ -18,7 +18,8 @@
             [cljs.util :as util]
             [cljs.test-util :as test]
             [cljs.build.api :as build]
-            [cljs.closure :as closure]))
+            [cljs.closure :as closure]
+            [clojure.string :as string]))
 
 (deftest test-target-file-for-cljs-ns
   (is (= (.getPath (build/target-file-for-cljs-ns 'example.core-lib nil))
@@ -574,21 +575,34 @@
         (testing "requires code.split.c"
           (is (test/document-write? content 'code.split.c)))))))
 
-(deftest test-runtime-config
-  (let [out (.getPath (io/file (test/tmp-dir) "runtime-config-test-out"))
-        {:keys [inputs opts]} {:inputs (str (io/file "src" "test" "cljs"))
-                               :opts {:main 'runtime-config-test.core
-                                      :output-dir out
-                                      :optimizations :none
-                                      ;:output-to (str out "/result.js")
-                                      ;:optimizations :advanced
-                                      :closure-defines {'runtime-config-test.core/foo "config value"}
-                                      :runtime-config {:some-lib/config {:some-name "some value"}}}}
+(defn build-runtime-config-project [name & [override-opts keep-it-dirty?]]
+  (let [out (.getPath (io/file (test/tmp-dir) (str "runtime-config-test-" name "-out")))
+        result-file (str out "/result.js")
+        inputs (str (io/file "src" "test" "cljs"))
+        build-inputs (build/inputs (io/file inputs "runtime_config_test/core.cljs"))
+        opts {:main            'runtime-config-test.core
+              :output-dir      out
+              :output-to       result-file
+              :optimizations   :none
+              :closure-defines {'runtime-config-test.core/foo "config value"}
+              :runtime-config  {:some-lib/config {:some-name "some value"}}}
+        opts (merge opts override-opts)
         cenv (env/default-compiler-env)]
-    (test/delete-out-files out)
-    (println "OUT DIR" out)
-    (build/build (build/inputs
-                   (io/file inputs "runtime_config_test/core.cljs"))
-                 opts cenv)
-    ;TODO test that expected runtime config was emitted into generated js
-    ))
+    (when-not keep-it-dirty?
+      (test/delete-out-files out))
+    (build/build build-inputs opts cenv)
+    {:inputs inputs
+     :opts   opts
+     :result (slurp (io/file result-file))
+     :cenv   cenv}))
+
+(deftest test-runtime-config
+  (let [project1a (build-runtime-config-project "1")
+        ; keep it dirty so we test that :closure-defines change triggers proper recompilation
+        project1b (build-runtime-config-project "1" {:runtime-config {:some-lib/config {:some-name "a-value-configured-via-runtime-config"}}} true)
+        ; keep it dirty so we test that :optimizations change triggers proper recompilation
+        project1c (build-runtime-config-project "1" {:runtime-config {:some-lib/config {:some-name "a-value-configured-via-runtime-config"}}
+                                                     :optimizations  :advanced} true)]
+    (is (some? (string/index-of (:result project1a) "CLOSURE_UNCOMPILED_DEFINES = {\"runtime_config_test.core.foo\":\"config value\",\"cljs.runtime_config._STAR_serialized_runtime_config_STAR_\":\"#:some-lib{:config {:some-name \\\"some value\\\"}}\\n\"}")))
+    (is (some? (string/index-of (:result project1b) "CLOSURE_UNCOMPILED_DEFINES = {\"runtime_config_test.core.foo\":\"config value\",\"cljs.runtime_config._STAR_serialized_runtime_config_STAR_\":\"#:some-lib{:config {:some-name \\\"a-value-configured-via-runtime-config\\\"}}\\n\"}")))
+    (is (some? (string/index-of (:result project1c) "a-value-configured-via-runtime-config")))))
