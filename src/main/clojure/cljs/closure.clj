@@ -2221,6 +2221,17 @@
       (assoc-in [:closure-defines (str (comp/munge 'cljs.core/*target*))]
         (name (:target opts)))
 
+      ; for backward compatibility
+      (:external-config opts)
+      (as-> opts
+        ; TODO: warn here
+        (assoc opts :runtime-config (:external-config opts)))
+
+      (:runtime-config opts)
+      (assoc-in [:closure-defines (str (comp/munge 'cljs.runtime-config/*serialized-runtime-config*))]
+                (prn-str (:runtime-config opts)) ; TODO: here should be robust try-catch with validation
+                )
+
       (= optimizations :none)
       (assoc
         :cache-analysis (:cache-analysis opts true)
@@ -2710,6 +2721,7 @@
                            ana/*cljs-static-fns*)
              sources (when source
                        (-find-sources source opts))]
+         (println "EFFECTIVE COMPILER OPTS" (prn-str opts))
          (check-output-to opts)
          (check-output-dir opts)
          (check-source-map opts)

@@ -573,3 +573,22 @@
       (let [content (slurp (-> opts :modules :c :output-to))]
         (testing "requires code.split.c"
           (is (test/document-write? content 'code.split.c)))))))
+
+(deftest test-runtime-config
+  (let [out (.getPath (io/file (test/tmp-dir) "runtime-config-test-out"))
+        {:keys [inputs opts]} {:inputs (str (io/file "src" "test" "cljs"))
+                               :opts {:main 'runtime-config-test.core
+                                      :output-dir out
+                                      :optimizations :none
+                                      ;:output-to (str out "/result.js")
+                                      ;:optimizations :advanced
+                                      :closure-defines {'runtime-config-test.core/foo "config value"}
+                                      :runtime-config {:some-lib/config {:some-name "some value"}}}}
+        cenv (env/default-compiler-env)]
+    (test/delete-out-files out)
+    (println "OUT DIR" out)
+    (build/build (build/inputs
+                   (io/file inputs "runtime_config_test/core.cljs"))
+                 opts cenv)
+    ;TODO test that expected runtime config was emitted into generated js
+    ))
